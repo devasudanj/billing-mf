@@ -2,7 +2,7 @@
       ******************************************************************
       * PROGRAM  : SAMPLE
       * PURPOSE  : Read billing detail records from an input file
-      *            and insert them into the DB2 table BILL_TEST.
+      *            and write them to an output file for database load.
       * AUTHOR   : Billing Team
       * DATE     : 2026-05-06
       ******************************************************************
@@ -13,54 +13,58 @@
        ENVIRONMENT DIVISION.
 
        CONFIGURATION SECTION.
-       SOURCE-COMPUTER. IBM-ZOS.
-       OBJECT-COMPUTER. IBM-ZOS.
 
        INPUT-OUTPUT SECTION.
        FILE-CONTROL.
            SELECT BILLING-INPUT-FILE
                ASSIGN TO BILLIN
-               ORGANIZATION IS SEQUENTIAL
-               ACCESS MODE  IS SEQUENTIAL
+               ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS  IS WS-FILE-STATUS.
+
+           SELECT BILLING-OUTPUT-FILE
+               ASSIGN TO BILLOUT
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS  IS WS-OUT-STATUS.
 
        DATA DIVISION.
 
        FILE SECTION.
-       FD  BILLING-INPUT-FILE
-           RECORDING MODE IS F
-           RECORD CONTAINS 41 CHARACTERS
-           BLOCK CONTAINS 0 RECORDS.
+       FD  BILLING-INPUT-FILE.
 
-           COPY TEST.
+           COPY "TEST.cpy".
+
+       FD  BILLING-OUTPUT-FILE.
+       01  OUTPUT-RECORD                PIC X(45).
 
        WORKING-STORAGE SECTION.
 
-       01  WS-FILE-STATUS             PIC X(02).
-           88  WS-FILE-OK             VALUE '00'.
-           88  WS-FILE-EOF            VALUE '10'.
+       01  WS-FILE-STATUS              PIC X(02).
+           88  WS-FILE-OK              VALUE '00'.
+           88  WS-FILE-EOF             VALUE '10'.
+
+       01  WS-OUT-STATUS               PIC X(02).
+           88  WS-OUT-OK               VALUE '00'.
 
        01  WS-SWITCHES.
-           05  WS-EOF-SW              PIC X(01) VALUE 'N'.
-               88  WS-EOF                       VALUE 'Y'.
-               88  WS-NOT-EOF                   VALUE 'N'.
+           05  WS-EOF-SW               PIC X(01) VALUE 'N'.
+               88  WS-EOF                        VALUE 'Y'.
+               88  WS-NOT-EOF                    VALUE 'N'.
 
        01  WS-COUNTERS.
-           05  WS-RECORDS-READ        PIC 9(09) VALUE ZEROS.
-           05  WS-RECORDS-INSERTED    PIC 9(09) VALUE ZEROS.
-           05  WS-RECORDS-ERROR       PIC 9(09) VALUE ZEROS.
+           05  WS-RECORDS-READ         PIC 9(09) VALUE ZEROS.
+           05  WS-RECORDS-INSERTED     PIC 9(09) VALUE ZEROS.
+           05  WS-RECORDS-ERROR        PIC 9(09) VALUE ZEROS.
 
-       01  WS-DISPLAY-MSG             PIC X(80) VALUE SPACES.
+       01  WS-DISPLAY-MSG              PIC X(80) VALUE SPACES.
 
-      ******************************************************************
-      * DB2 INCLUDE FOR BILL_TEST TABLE
-      ******************************************************************
-           EXEC SQL INCLUDE TESTDCL  END-EXEC.
-
-      ******************************************************************
-      * DB2 COMMUNICATION AREA
-      ******************************************************************
-           EXEC SQL INCLUDE SQLCA    END-EXEC.
+       01  WS-OUTPUT-LINE.
+           05  WS-OUT-ACCOUNT          PIC X(15).
+           05  WS-OUT-SEP1             PIC X(01) VALUE '|'.
+           05  WS-OUT-ELEMENT-ID       PIC X(08).
+           05  WS-OUT-SEP2             PIC X(01) VALUE '|'.
+           05  WS-OUT-VOLUME           PIC -(08)9.
+           05  WS-OUT-SEP3             PIC X(01) VALUE '|'.
+           05  WS-OUT-DATE             PIC X(10).
 
        PROCEDURE DIVISION.
 
@@ -75,11 +79,10 @@
            STOP RUN.
 
       ******************************************************************
-      * 1000-INITIALIZE: Open input file and validate
+      * 1000-INITIALIZE: Open input and output files
       ******************************************************************
        1000-INITIALIZE.
-           OPEN INPUT BILLING-INPUT-FILE
-
+           OPEN INPUT  BILLING-INPUT-FILE
            IF NOT WS-FILE-OK
                STRING 'ERROR: UNABLE TO OPEN INPUT FILE. STATUS='
                       WS-FILE-STATUS
@@ -90,7 +93,18 @@
                STOP RUN
            END-IF
 
-           DISPLAY 'SAMPLE: BILLING INPUT FILE OPENED SUCCESSFULLY'
+           OPEN OUTPUT BILLING-OUTPUT-FILE
+           IF NOT WS-OUT-OK
+               STRING 'ERROR: UNABLE TO OPEN OUTPUT FILE. STATUS='
+                      WS-OUT-STATUS
+                      DELIMITED BY SIZE
+                      INTO WS-DISPLAY-MSG
+               DISPLAY WS-DISPLAY-MSG
+               MOVE 16 TO RETURN-CODE
+               STOP RUN
+           END-IF
+
+           DISPLAY 'SAMPLE: FILES OPENED SUCCESSFULLY'
 
            PERFORM 2100-READ-INPUT-FILE
            .
@@ -99,7 +113,7 @@
       * 2000-PROCESS-RECORDS: Process each input record
       ******************************************************************
        2000-PROCESS-RECORDS.
-           PERFORM 2200-INSERT-DB2-TABLE
+           PERFORM 2200-WRITE-OUTPUT-RECORD
            PERFORM 2100-READ-INPUT-FILE
            .
 
@@ -127,46 +141,26 @@
            .
 
       ******************************************************************
-      * 2200-INSERT-DB2-TABLE: Insert record into BILL_TEST table
+      * 2200-WRITE-OUTPUT-RECORD: Write record to output file
       ******************************************************************
-       2200-INSERT-DB2-TABLE.
-           MOVE ACS-DETAIL-ACCOUNT    TO TST-DTL-ACCT-NUM
-           MOVE ACS-DETAIL-ELEMENT-ID TO TST-DTL-ELEMENT-ID
-           MOVE ACS-DETAIL-VOLUME     TO TST-DTL-VOLUME
-           MOVE ACS-DETAIL-DATE       TO TST-DTL-DATE
+       2200-WRITE-OUTPUT-RECORD.
+           MOVE ACS-DETAIL-ACCOUNT    TO WS-OUT-ACCOUNT
+           MOVE ACS-DETAIL-ELEMENT-ID TO WS-OUT-ELEMENT-ID
+           MOVE ACS-DETAIL-VOLUME     TO WS-OUT-VOLUME
+           MOVE ACS-DETAIL-DATE       TO WS-OUT-DATE
 
-           EXEC SQL
-               INSERT INTO BILL_TEST
-               (
-                   TST_DTL_ACCT_NUM,
-                   TST_DTL_ELEMENT_ID,
-                   TST_DTL_VOLUME,
-                   TST_DTL_DATE
-               )
-               VALUES
-               (
-                   :TST-DTL-ACCT-NUM,
-                   :TST-DTL-ELEMENT-ID,
-                   :TST-DTL-VOLUME,
-                   :TST-DTL-DATE
-               )
-           END-EXEC
+           WRITE OUTPUT-RECORD FROM WS-OUTPUT-LINE
 
-           EVALUATE SQLCODE
-               WHEN 0
-                   ADD 1 TO WS-RECORDS-INSERTED
-               WHEN -803
-                   DISPLAY 'WARNING: DUPLICATE KEY FOR ACCOUNT '
-                           ACS-DETAIL-ACCOUNT
-                   ADD 1 TO WS-RECORDS-ERROR
-               WHEN OTHER
-                   STRING 'ERROR: DB2 INSERT FAILED. SQLCODE='
-                          SQLCODE
-                          DELIMITED BY SIZE
-                          INTO WS-DISPLAY-MSG
-                   DISPLAY WS-DISPLAY-MSG
-                   ADD 1 TO WS-RECORDS-ERROR
-           END-EVALUATE
+           IF WS-OUT-OK
+               ADD 1 TO WS-RECORDS-INSERTED
+           ELSE
+               STRING 'ERROR: WRITE FAILED. STATUS='
+                      WS-OUT-STATUS
+                      DELIMITED BY SIZE
+                      INTO WS-DISPLAY-MSG
+               DISPLAY WS-DISPLAY-MSG
+               ADD 1 TO WS-RECORDS-ERROR
+           END-IF
            .
 
       ******************************************************************
@@ -174,16 +168,7 @@
       ******************************************************************
        3000-TERMINATE.
            CLOSE BILLING-INPUT-FILE
-
-           IF NOT WS-FILE-OK
-               IF NOT WS-FILE-EOF
-                   STRING 'WARNING: FILE CLOSE STATUS='
-                          WS-FILE-STATUS
-                          DELIMITED BY SIZE
-                          INTO WS-DISPLAY-MSG
-                   DISPLAY WS-DISPLAY-MSG
-               END-IF
-           END-IF
+           CLOSE BILLING-OUTPUT-FILE
 
            DISPLAY '****************************************'
            DISPLAY '* SAMPLE PROGRAM - EXECUTION SUMMARY   *'

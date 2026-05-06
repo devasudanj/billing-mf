@@ -1,7 +1,8 @@
 #!/bin/bash
 ##########################################################################
 # TEST SCRIPT : test_sample.sh
-# PURPOSE     : Validate the SAMPLE COBOL billing program
+# PURPOSE     : Validate the SAMPLE COBOL billing program end-to-end
+#               including compilation, execution, and SQLite database load
 # AUTHOR      : Billing Team
 # DATE        : 2026-05-06
 ##########################################################################
@@ -11,10 +12,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 RESULTS_DIR="$PROJECT_ROOT/TESTRESULTS"
+BUILD_DIR="$PROJECT_ROOT/BUILD"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RESULT_FILE="$RESULTS_DIR/test_results_${TIMESTAMP}.txt"
 
-mkdir -p "$RESULTS_DIR"
+mkdir -p "$RESULTS_DIR" "$BUILD_DIR"
 
 # Counters
 TOTAL_TESTS=0
@@ -49,40 +51,15 @@ log_result() {
 ##########################################################################
 log_header "TEST 1: Source File Existence Checks"
 
-# Check SAMPLE.cbl
-if [ -f "$PROJECT_ROOT/COBOL/SAMPLE.cbl" ]; then
-    log_result "SAMPLE.cbl exists" "PASS"
-else
-    log_result "SAMPLE.cbl exists" "FAIL" "File not found"
-fi
-
-# Check TEST.cpy
-if [ -f "$PROJECT_ROOT/COPYBOOK/TEST.cpy" ]; then
-    log_result "TEST.cpy exists" "PASS"
-else
-    log_result "TEST.cpy exists" "FAIL" "File not found"
-fi
-
-# Check TESTDCL.cbl
-if [ -f "$PROJECT_ROOT/DCLGEN/TESTDCL.cbl" ]; then
-    log_result "TESTDCL.cbl exists" "PASS"
-else
-    log_result "TESTDCL.cbl exists" "FAIL" "File not found"
-fi
-
-# Check JCL
-if [ -f "$PROJECT_ROOT/JCL/RUNSAMP.jcl" ]; then
-    log_result "RUNSAMP.jcl exists" "PASS"
-else
-    log_result "RUNSAMP.jcl exists" "FAIL" "File not found"
-fi
-
-# Check test data
-if [ -f "$PROJECT_ROOT/TESTDATA/BILLIN.dat" ]; then
-    log_result "BILLIN.dat test data exists" "PASS"
-else
-    log_result "BILLIN.dat test data exists" "FAIL" "File not found"
-fi
+for f in "COBOL/SAMPLE.cbl" "COPYBOOK/TEST.cpy" "DCLGEN/TESTDCL.cbl" \
+         "JCL/RUNSAMP.jcl" "TESTDATA/BILLIN.dat" \
+         "SCRIPTS/run_billing.sh" "SCRIPTS/load_to_sqlite.py"; do
+    if [ -f "$PROJECT_ROOT/$f" ]; then
+        log_result "$f exists" "PASS"
+    else
+        log_result "$f exists" "FAIL" "File not found"
+    fi
+done
 
 ##########################################################################
 # TEST 2: COBOL Source Structure Validation
@@ -91,8 +68,8 @@ log_header "TEST 2: COBOL Source Structure Validation"
 
 SAMPLE_SRC="$PROJECT_ROOT/COBOL/SAMPLE.cbl"
 
-# Check required divisions
-for div in "IDENTIFICATION DIVISION" "ENVIRONMENT DIVISION" "DATA DIVISION" "PROCEDURE DIVISION"; do
+for div in "IDENTIFICATION DIVISION" "ENVIRONMENT DIVISION" \
+           "DATA DIVISION" "PROCEDURE DIVISION"; do
     if grep -q "$div" "$SAMPLE_SRC"; then
         log_result "Contains $div" "PASS"
     else
@@ -100,14 +77,12 @@ for div in "IDENTIFICATION DIVISION" "ENVIRONMENT DIVISION" "DATA DIVISION" "PRO
     fi
 done
 
-# Check PROGRAM-ID
 if grep -q "PROGRAM-ID" "$SAMPLE_SRC"; then
     log_result "Contains PROGRAM-ID" "PASS"
 else
     log_result "Contains PROGRAM-ID" "FAIL" "PROGRAM-ID not found"
 fi
 
-# Check FILE-CONTROL
 if grep -q "FILE-CONTROL" "$SAMPLE_SRC"; then
     log_result "Contains FILE-CONTROL" "PASS"
 else
@@ -115,67 +90,14 @@ else
 fi
 
 ##########################################################################
-# TEST 3: Copybook Inclusion Validation
+# TEST 3: Copybook Record Layout Validation
 ##########################################################################
-log_header "TEST 3: Copybook and DCLGEN Inclusion"
-
-# Check COPY TEST reference
-if grep -q "COPY TEST" "$SAMPLE_SRC"; then
-    log_result "COPY TEST statement present" "PASS"
-else
-    log_result "COPY TEST statement present" "FAIL" "COPY TEST not found"
-fi
-
-# Check INCLUDE TESTDCL reference
-if grep -q "INCLUDE TESTDCL" "$SAMPLE_SRC"; then
-    log_result "EXEC SQL INCLUDE TESTDCL present" "PASS"
-else
-    log_result "EXEC SQL INCLUDE TESTDCL present" "FAIL" "INCLUDE TESTDCL not found"
-fi
-
-# Check INCLUDE SQLCA reference
-if grep -q "INCLUDE SQLCA" "$SAMPLE_SRC"; then
-    log_result "EXEC SQL INCLUDE SQLCA present" "PASS"
-else
-    log_result "EXEC SQL INCLUDE SQLCA present" "FAIL" "INCLUDE SQLCA not found"
-fi
-
-##########################################################################
-# TEST 4: DB2 SQL Validation
-##########################################################################
-log_header "TEST 4: DB2 SQL Statement Validation"
-
-# Check INSERT INTO BILL_TEST
-if grep -q "INSERT INTO BILL_TEST" "$SAMPLE_SRC"; then
-    log_result "INSERT INTO BILL_TEST present" "PASS"
-else
-    log_result "INSERT INTO BILL_TEST present" "FAIL" "INSERT statement not found"
-fi
-
-# Check host variable references
-for var in ":TST-DTL-ACCT-NUM" ":TST-DTL-ELEMENT-ID" ":TST-DTL-VOLUME" ":TST-DTL-DATE"; do
-    if grep -q "$var" "$SAMPLE_SRC"; then
-        log_result "Host variable $var used" "PASS"
-    else
-        log_result "Host variable $var used" "FAIL" "Host variable not found"
-    fi
-done
-
-# Check SQLCODE evaluation
-if grep -q "SQLCODE" "$SAMPLE_SRC"; then
-    log_result "SQLCODE error handling present" "PASS"
-else
-    log_result "SQLCODE error handling present" "FAIL" "SQLCODE not checked"
-fi
-
-##########################################################################
-# TEST 5: Copybook Record Layout Validation
-##########################################################################
-log_header "TEST 5: Copybook Record Layout Validation"
+log_header "TEST 3: Copybook Record Layout Validation"
 
 COPY_SRC="$PROJECT_ROOT/COPYBOOK/TEST.cpy"
 
-for field in "ACS-BILL-DETAIL-RECORD" "ACS-DETAIL-ACCOUNT" "ACS-DETAIL-ELEMENT-ID" "ACS-DETAIL-VOLUME" "ACS-DETAIL-DATE"; do
+for field in "ACS-BILL-DETAIL-RECORD" "ACS-DETAIL-ACCOUNT" \
+             "ACS-DETAIL-ELEMENT-ID" "ACS-DETAIL-VOLUME" "ACS-DETAIL-DATE"; do
     if grep -q "$field" "$COPY_SRC"; then
         log_result "Copybook field $field present" "PASS"
     else
@@ -183,22 +105,27 @@ for field in "ACS-BILL-DETAIL-RECORD" "ACS-DETAIL-ACCOUNT" "ACS-DETAIL-ELEMENT-I
     fi
 done
 
+if grep -q 'COPY.*TEST' "$SAMPLE_SRC"; then
+    log_result "COPY TEST statement in SAMPLE.cbl" "PASS"
+else
+    log_result "COPY TEST statement in SAMPLE.cbl" "FAIL" "Not found"
+fi
+
 ##########################################################################
-# TEST 6: DCLGEN Table Declaration Validation
+# TEST 4: DCLGEN Table Declaration Validation
 ##########################################################################
-log_header "TEST 6: DCLGEN Table Declaration Validation"
+log_header "TEST 4: DCLGEN Table Declaration Validation"
 
 DCL_SRC="$PROJECT_ROOT/DCLGEN/TESTDCL.cbl"
 
-# Check table declaration
 if grep -q "DECLARE BILL_TEST TABLE" "$DCL_SRC"; then
     log_result "DECLARE BILL_TEST TABLE present" "PASS"
 else
     log_result "DECLARE BILL_TEST TABLE present" "FAIL" "Declaration not found"
 fi
 
-# Check DCLGEN host structure
-for field in "TST-DTL-ACCT-NUM" "TST-DTL-ELEMENT-ID" "TST-DTL-VOLUME" "TST-DTL-DATE"; do
+for field in "TST-DTL-ACCT-NUM" "TST-DTL-ELEMENT-ID" \
+             "TST-DTL-VOLUME" "TST-DTL-DATE"; do
     if grep -q "$field" "$DCL_SRC"; then
         log_result "DCLGEN field $field present" "PASS"
     else
@@ -207,95 +134,234 @@ for field in "TST-DTL-ACCT-NUM" "TST-DTL-ELEMENT-ID" "TST-DTL-VOLUME" "TST-DTL-D
 done
 
 ##########################################################################
-# TEST 7: Test Data File Validation
+# TEST 5: COBOL Coding Standards Checks
 ##########################################################################
-log_header "TEST 7: Test Data File Validation"
+log_header "TEST 5: COBOL Coding Standards Checks"
 
-DATA_FILE="$PROJECT_ROOT/TESTDATA/BILLIN.dat"
-
-# Check record count
-RECORD_COUNT=$(wc -l < "$DATA_FILE" | tr -d ' ')
-if [ "$RECORD_COUNT" -ge 1 ]; then
-    log_result "Test data has $RECORD_COUNT records" "PASS"
-else
-    log_result "Test data has records" "FAIL" "No records found"
-fi
-
-# Check record length (41 chars per record)
-BAD_RECORDS=0
-while IFS= read -r line; do
-    LEN=${#line}
-    if [ "$LEN" -ne 41 ]; then
-        BAD_RECORDS=$((BAD_RECORDS + 1))
-    fi
-done < "$DATA_FILE"
-
-if [ "$BAD_RECORDS" -eq 0 ]; then
-    log_result "All records are 41 characters" "PASS"
-else
-    log_result "Record length check" "FAIL" "$BAD_RECORDS records have incorrect length"
-fi
-
-##########################################################################
-# TEST 8: COBOL Coding Standards Checks
-##########################################################################
-log_header "TEST 8: COBOL Coding Standards Checks"
-
-# Check paragraph naming convention (numeric prefix)
 PARA_COUNT=$(grep -cE "^       [0-9]{4}-" "$SAMPLE_SRC" || true)
 if [ "$PARA_COUNT" -ge 3 ]; then
     log_result "Paragraph naming convention (NNNN-NAME)" "PASS"
 else
-    log_result "Paragraph naming convention (NNNN-NAME)" "FAIL" "Found $PARA_COUNT paragraphs"
+    log_result "Paragraph naming convention (NNNN-NAME)" "FAIL" \
+        "Found $PARA_COUNT paragraphs"
 fi
 
-# Check for STOP RUN
 if grep -q "STOP RUN" "$SAMPLE_SRC"; then
     log_result "STOP RUN present" "PASS"
 else
-    log_result "STOP RUN present" "FAIL" "STOP RUN not found"
+    log_result "STOP RUN present" "FAIL" "Not found"
 fi
 
-# Check for file status handling
 if grep -q "FILE STATUS" "$SAMPLE_SRC"; then
     log_result "FILE STATUS defined" "PASS"
 else
-    log_result "FILE STATUS defined" "FAIL" "FILE STATUS not found"
+    log_result "FILE STATUS defined" "FAIL" "Not found"
 fi
 
-# Check for RETURN-CODE usage
 if grep -q "RETURN-CODE" "$SAMPLE_SRC"; then
     log_result "RETURN-CODE set" "PASS"
 else
-    log_result "RETURN-CODE set" "FAIL" "RETURN-CODE not used"
+    log_result "RETURN-CODE set" "FAIL" "Not found"
 fi
 
 ##########################################################################
-# TEST 9: JCL Validation
+# TEST 6: JCL Validation
 ##########################################################################
-log_header "TEST 9: JCL Validation"
+log_header "TEST 6: JCL Validation"
 
 JCL_SRC="$PROJECT_ROOT/JCL/RUNSAMP.jcl"
 
-# Check for JOB card
 if grep -q "^//RUNSAMP.*JOB" "$JCL_SRC"; then
     log_result "JOB card present" "PASS"
 else
-    log_result "JOB card present" "FAIL" "JOB card not found"
+    log_result "JOB card present" "FAIL" "Not found"
 fi
 
-# Check for BILLIN DD
 if grep -q "BILLIN" "$JCL_SRC"; then
     log_result "BILLIN DD statement present" "PASS"
 else
-    log_result "BILLIN DD statement present" "FAIL" "BILLIN DD not found"
+    log_result "BILLIN DD statement present" "FAIL" "Not found"
 fi
 
-# Check for BIND step
 if grep -q "BIND" "$JCL_SRC"; then
     log_result "BIND step present" "PASS"
 else
-    log_result "BIND step present" "FAIL" "BIND step not found"
+    log_result "BIND step present" "FAIL" "Not found"
+fi
+
+##########################################################################
+# TEST 7: Compilation Test (GnuCOBOL)
+##########################################################################
+log_header "TEST 7: COBOL Compilation"
+
+rm -f "$BUILD_DIR/SAMPLE"
+
+COMPILE_OUTPUT=$(cobc -x -o "$BUILD_DIR/SAMPLE" \
+    -I "$PROJECT_ROOT/COPYBOOK" \
+    "$PROJECT_ROOT/COBOL/SAMPLE.cbl" 2>&1) || true
+
+if [ -f "$BUILD_DIR/SAMPLE" ]; then
+    log_result "COBOL compilation succeeds" "PASS"
+else
+    log_result "COBOL compilation succeeds" "FAIL" "$COMPILE_OUTPUT"
+fi
+
+##########################################################################
+# TEST 8: Program Execution Test
+##########################################################################
+log_header "TEST 8: Program Execution"
+
+rm -f "$BUILD_DIR/BILLOUT" "$BUILD_DIR/billing.db"
+
+export BILLIN="$PROJECT_ROOT/TESTDATA/BILLIN.dat"
+export BILLOUT="$BUILD_DIR/BILLOUT"
+
+EXEC_OUTPUT=$(cd "$BUILD_DIR" && ./SAMPLE 2>&1) || true
+COBOL_RC=$?
+
+if [ $COBOL_RC -le 4 ]; then
+    log_result "Program executes successfully (RC=$COBOL_RC)" "PASS"
+else
+    log_result "Program executes successfully" "FAIL" "RC=$COBOL_RC"
+fi
+
+if echo "$EXEC_OUTPUT" | grep -q "FILES OPENED SUCCESSFULLY"; then
+    log_result "Files opened successfully" "PASS"
+else
+    log_result "Files opened successfully" "FAIL" "Open message not found"
+fi
+
+if echo "$EXEC_OUTPUT" | grep -q "RECORDS READ.*000000005"; then
+    log_result "All 5 records read" "PASS"
+else
+    log_result "All 5 records read" "FAIL" "Unexpected count"
+fi
+
+if echo "$EXEC_OUTPUT" | grep -q "RECORDS INSERTED.*000000005"; then
+    log_result "All 5 records written" "PASS"
+else
+    log_result "All 5 records written" "FAIL" "Unexpected count"
+fi
+
+if echo "$EXEC_OUTPUT" | grep -q "RECORDS IN ERROR.*000000000"; then
+    log_result "Zero errors reported" "PASS"
+else
+    log_result "Zero errors reported" "FAIL" "Errors found"
+fi
+
+##########################################################################
+# TEST 9: Output File Validation
+##########################################################################
+log_header "TEST 9: Output File Validation"
+
+if [ -f "$BUILD_DIR/BILLOUT" ]; then
+    log_result "Output file BILLOUT created" "PASS"
+else
+    log_result "Output file BILLOUT created" "FAIL" "File not found"
+fi
+
+OUT_LINES=$(wc -l < "$BUILD_DIR/BILLOUT" 2>/dev/null | tr -d ' ')
+if [ "$OUT_LINES" = "5" ]; then
+    log_result "Output file has 5 records" "PASS"
+else
+    log_result "Output file has 5 records" "FAIL" "Found $OUT_LINES"
+fi
+
+if head -1 "$BUILD_DIR/BILLOUT" | grep -q "000000000012345|ELMT0001|.*1000|2026-05-01"; then
+    log_result "First record data correct" "PASS"
+else
+    log_result "First record data correct" "FAIL" \
+        "Got: $(head -1 "$BUILD_DIR/BILLOUT")"
+fi
+
+##########################################################################
+# TEST 10: SQLite Database Load
+##########################################################################
+log_header "TEST 10: SQLite Database Load"
+
+DB_FILE="$BUILD_DIR/billing.db"
+LOAD_OUTPUT=$(python3 "$PROJECT_ROOT/SCRIPTS/load_to_sqlite.py" \
+    "$BUILD_DIR/BILLOUT" "$DB_FILE" 2>&1) || true
+
+if [ -f "$DB_FILE" ]; then
+    log_result "SQLite database created" "PASS"
+else
+    log_result "SQLite database created" "FAIL" "File not found"
+fi
+
+if echo "$LOAD_OUTPUT" | grep -q "Records Inserted: 5"; then
+    log_result "All 5 records inserted into SQLite" "PASS"
+else
+    log_result "All 5 records inserted into SQLite" "FAIL" "$LOAD_OUTPUT"
+fi
+
+if echo "$LOAD_OUTPUT" | grep -q "Errors          : 0"; then
+    log_result "Zero load errors" "PASS"
+else
+    log_result "Zero load errors" "FAIL" "Errors found"
+fi
+
+# Verify database contents with SQL queries
+DB_COUNT=$(python3 -c "
+import sqlite3
+conn = sqlite3.connect('$DB_FILE')
+c = conn.execute('SELECT COUNT(*) FROM BILL_TEST')
+print(c.fetchone()[0])
+conn.close()
+" 2>/dev/null)
+
+if [ "$DB_COUNT" = "5" ]; then
+    log_result "BILL_TEST has 5 rows" "PASS"
+else
+    log_result "BILL_TEST has 5 rows" "FAIL" "Found $DB_COUNT"
+fi
+
+# Check specific record
+DB_REC1=$(python3 -c "
+import sqlite3
+conn = sqlite3.connect('$DB_FILE')
+c = conn.execute(\"SELECT TST_DTL_ACCT_NUM, TST_DTL_ELEMENT_ID, TST_DTL_VOLUME, TST_DTL_DATE FROM BILL_TEST WHERE TST_DTL_ACCT_NUM LIKE '%12345'\")
+row = c.fetchone()
+if row:
+    print(f'{row[0].strip()}|{row[1].strip()}|{row[2]}|{row[3].strip()}')
+conn.close()
+" 2>/dev/null)
+
+if [ "$DB_REC1" = "000000000012345|ELMT0001|1000|2026-05-01" ]; then
+    log_result "Record 1 data verified in database" "PASS"
+else
+    log_result "Record 1 data verified in database" "FAIL" "Got: $DB_REC1"
+fi
+
+# Check record 5
+DB_REC5=$(python3 -c "
+import sqlite3
+conn = sqlite3.connect('$DB_FILE')
+c = conn.execute(\"SELECT TST_DTL_ACCT_NUM, TST_DTL_ELEMENT_ID, TST_DTL_VOLUME, TST_DTL_DATE FROM BILL_TEST WHERE TST_DTL_ACCT_NUM LIKE '%33333'\")
+row = c.fetchone()
+if row:
+    print(f'{row[0].strip()}|{row[1].strip()}|{row[2]}|{row[3].strip()}')
+conn.close()
+" 2>/dev/null)
+
+if [ "$DB_REC5" = "000000000033333|ELMT0005|5000|2026-05-05" ]; then
+    log_result "Record 5 data verified in database" "PASS"
+else
+    log_result "Record 5 data verified in database" "FAIL" "Got: $DB_REC5"
+fi
+
+##########################################################################
+# TEST 11: Duplicate Record Handling
+##########################################################################
+log_header "TEST 11: Duplicate Record Handling"
+
+DUP_OUTPUT=$(python3 "$PROJECT_ROOT/SCRIPTS/load_to_sqlite.py" \
+    "$BUILD_DIR/BILLOUT" "$DB_FILE" 2>&1) || true
+
+if echo "$DUP_OUTPUT" | grep -q "Duplicates      : 5"; then
+    log_result "Duplicate records detected correctly" "PASS"
+else
+    log_result "Duplicate records detected correctly" "FAIL" "$DUP_OUTPUT"
 fi
 
 ##########################################################################

@@ -5,8 +5,8 @@
 | Metric             | Value                     |
 |--------------------|---------------------------|
 | **Run Date**       | 2026-05-06                |
-| **Total Tests**    | 39                        |
-| **Passed**         | 39                        |
+| **Total Tests**    | 47                        |
+| **Passed**         | 47                        |
 | **Failed**         | 0                         |
 | **Overall Result** | ALL TESTS PASSED          |
 
@@ -14,15 +14,17 @@
 
 ## Test Categories
 
-### 1. Source File Existence (5 tests)
+### 1. Source File Existence (7 tests)
 
-| Test                         | Result |
-|------------------------------|--------|
-| SAMPLE.cbl exists            | PASS   |
-| TEST.cpy exists              | PASS   |
-| TESTDCL.cbl exists           | PASS   |
-| RUNSAMP.jcl exists           | PASS   |
-| BILLIN.dat test data exists  | PASS   |
+| Test                              | Result |
+|-----------------------------------|--------|
+| COBOL/SAMPLE.cbl exists           | PASS   |
+| COPYBOOK/TEST.cpy exists          | PASS   |
+| DCLGEN/TESTDCL.cbl exists         | PASS   |
+| JCL/RUNSAMP.jcl exists            | PASS   |
+| TESTDATA/BILLIN.dat exists        | PASS   |
+| SCRIPTS/run_billing.sh exists     | PASS   |
+| SCRIPTS/load_to_sqlite.py exists  | PASS   |
 
 ### 2. COBOL Source Structure (6 tests)
 
@@ -35,53 +37,28 @@
 | Contains PROGRAM-ID               | PASS   |
 | Contains FILE-CONTROL             | PASS   |
 
-### 3. Copybook and DCLGEN Inclusion (3 tests)
-
-| Test                              | Result |
-|-----------------------------------|--------|
-| COPY TEST statement present       | PASS   |
-| EXEC SQL INCLUDE TESTDCL present  | PASS   |
-| EXEC SQL INCLUDE SQLCA present    | PASS   |
-
-### 4. DB2 SQL Statement Validation (6 tests)
-
-| Test                                    | Result |
-|-----------------------------------------|--------|
-| INSERT INTO BILL_TEST present           | PASS   |
-| Host variable :TST-DTL-ACCT-NUM used    | PASS   |
-| Host variable :TST-DTL-ELEMENT-ID used  | PASS   |
-| Host variable :TST-DTL-VOLUME used      | PASS   |
-| Host variable :TST-DTL-DATE used        | PASS   |
-| SQLCODE error handling present          | PASS   |
-
-### 5. Copybook Record Layout (5 tests)
+### 3. Copybook Record Layout (6 tests)
 
 | Test                                        | Result |
 |---------------------------------------------|--------|
-| Field ACS-BILL-DETAIL-RECORD present        | PASS   |
-| Field ACS-DETAIL-ACCOUNT present            | PASS   |
-| Field ACS-DETAIL-ELEMENT-ID present         | PASS   |
-| Field ACS-DETAIL-VOLUME present             | PASS   |
-| Field ACS-DETAIL-DATE present               | PASS   |
+| Copybook field ACS-BILL-DETAIL-RECORD       | PASS   |
+| Copybook field ACS-DETAIL-ACCOUNT           | PASS   |
+| Copybook field ACS-DETAIL-ELEMENT-ID        | PASS   |
+| Copybook field ACS-DETAIL-VOLUME            | PASS   |
+| Copybook field ACS-DETAIL-DATE              | PASS   |
+| COPY TEST statement in SAMPLE.cbl           | PASS   |
 
-### 6. DCLGEN Table Declaration (5 tests)
+### 4. DCLGEN Table Declaration (5 tests)
 
 | Test                                    | Result |
 |-----------------------------------------|--------|
 | DECLARE BILL_TEST TABLE present         | PASS   |
-| DCLGEN field TST-DTL-ACCT-NUM present   | PASS   |
-| DCLGEN field TST-DTL-ELEMENT-ID present | PASS   |
-| DCLGEN field TST-DTL-VOLUME present     | PASS   |
-| DCLGEN field TST-DTL-DATE present       | PASS   |
+| DCLGEN field TST-DTL-ACCT-NUM           | PASS   |
+| DCLGEN field TST-DTL-ELEMENT-ID         | PASS   |
+| DCLGEN field TST-DTL-VOLUME             | PASS   |
+| DCLGEN field TST-DTL-DATE               | PASS   |
 
-### 7. Test Data File (2 tests)
-
-| Test                            | Result |
-|---------------------------------|--------|
-| Test data has 5 records         | PASS   |
-| All records are 41 characters   | PASS   |
-
-### 8. COBOL Coding Standards (4 tests)
+### 5. COBOL Coding Standards (4 tests)
 
 | Test                                         | Result |
 |----------------------------------------------|--------|
@@ -90,7 +67,7 @@
 | FILE STATUS defined                          | PASS   |
 | RETURN-CODE set                              | PASS   |
 
-### 9. JCL Validation (3 tests)
+### 6. JCL Validation (3 tests)
 
 | Test                            | Result |
 |---------------------------------|--------|
@@ -98,24 +75,65 @@
 | BILLIN DD statement present     | PASS   |
 | BIND step present               | PASS   |
 
+### 7. COBOL Compilation (1 test)
+
+| Test                            | Result |
+|---------------------------------|--------|
+| COBOL compilation succeeds      | PASS   |
+
+### 8. Program Execution (5 tests)
+
+| Test                                | Result |
+|-------------------------------------|--------|
+| Program executes successfully (RC=0)| PASS   |
+| Files opened successfully           | PASS   |
+| All 5 records read                  | PASS   |
+| All 5 records written               | PASS   |
+| Zero errors reported                | PASS   |
+
+### 9. Output File Validation (3 tests)
+
+| Test                            | Result |
+|---------------------------------|--------|
+| Output file BILLOUT created     | PASS   |
+| Output file has 5 records       | PASS   |
+| First record data correct       | PASS   |
+
+### 10. SQLite Database Load (6 tests)
+
+| Test                                    | Result |
+|-----------------------------------------|--------|
+| SQLite database created                 | PASS   |
+| All 5 records inserted into SQLite      | PASS   |
+| Zero load errors                        | PASS   |
+| BILL_TEST has 5 rows                    | PASS   |
+| Record 1 data verified in database      | PASS   |
+| Record 5 data verified in database      | PASS   |
+
+### 11. Duplicate Record Handling (1 test)
+
+| Test                                    | Result |
+|-----------------------------------------|--------|
+| Duplicate records detected correctly    | PASS   |
+
 ---
 
-## Test Data Summary
+## Database Contents After Successful Run
 
-| Account Number    | Element ID | Volume   | Date       |
-|-------------------|------------|----------|------------|
-| 000000000012345   | ELMT0001   | 00001000 | 2026-05-01 |
-| 000000000067890   | ELMT0002   | 00002500 | 2026-05-02 |
-| 000000000011111   | ELMT0003   | 00000750 | 2026-05-03 |
-| 000000000022222   | ELMT0004   | 00010000 | 2026-05-04 |
-| 000000000033333   | ELMT0005   | 00005000 | 2026-05-05 |
+| Account Number    | Element ID | Volume | Date       |
+|-------------------|------------|--------|------------|
+| 000000000012345   | ELMT0001   | 1000   | 2026-05-01 |
+| 000000000067890   | ELMT0002   | 2500   | 2026-05-02 |
+| 000000000011111   | ELMT0003   | 750    | 2026-05-03 |
+| 000000000022222   | ELMT0004   | 10000  | 2026-05-04 |
+| 000000000033333   | ELMT0005   | 5000   | 2026-05-05 |
 
 ---
 
-## Expected Program Output (on z/OS execution)
+## Program Output
 
 ```
-SAMPLE: BILLING INPUT FILE OPENED SUCCESSFULLY
+SAMPLE: FILES OPENED SUCCESSFULLY
 ****************************************
 * SAMPLE PROGRAM - EXECUTION SUMMARY   *
 ****************************************
@@ -123,4 +141,30 @@ SAMPLE: BILLING INPUT FILE OPENED SUCCESSFULLY
 * RECORDS INSERTED  : 000000005
 * RECORDS IN ERROR  : 000000000
 ****************************************
+```
+
+## SQLite Load Output
+
+```
+========================================
+ SQLite Load Summary
+========================================
+ Database        : BUILD/billing.db
+ Records Inserted: 5
+ Duplicates      : 0
+ Errors          : 0
+========================================
+
+========================================
+ BILL_TEST Table Contents
+========================================
+ACCT_NUM          ELEMENT_ID     VOLUME DATE
+--------------------------------------------------
+000000000012345   ELMT0001         1000 2026-05-01
+000000000067890   ELMT0002         2500 2026-05-02
+000000000011111   ELMT0003          750 2026-05-03
+000000000022222   ELMT0004        10000 2026-05-04
+000000000033333   ELMT0005         5000 2026-05-05
+--------------------------------------------------
+Total records: 5
 ```
